@@ -86,8 +86,42 @@ struct FileTreeRow: View {
     }
 }
 
+/// 初期画面のドロップゾーンを表示するビュー
+struct DropZonePlaceholder: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "doc.text.fill")
+                .font(.system(size: 48))
+                .foregroundColor(.secondary)
+
+            Text("Markdownファイルをドラッグ&ドロップ")
+                .font(.title2)
+                .fontWeight(.medium)
+                .foregroundColor(.primary)
+
+            Text("ファイルまたはフォルダをドロップしてプレビュー")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+
+            HStack(spacing: 8) {
+                ForEach(["md", "markdown"], id: \.self) { ext in
+                    Text(".\(ext)")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.accentColor.opacity(0.15))
+                        .foregroundColor(.accentColor)
+                        .cornerRadius(4)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 struct ContentView: View {
-    @State private var markdownContent: String = "Drag and drop a **Markdown** file here."
+    @State private var markdownContent: String? = nil
     @State private var isTargeted = false
     @State private var showError = false
     @State private var errorMessage = ""
@@ -103,6 +137,14 @@ struct ContentView: View {
     /// Markdownファイルとして許可する拡張子
     private let allowedExtensions: Set<String> = ["md", "markdown"]
 
+    /// ウィンドウタイトルに表示するテキスト
+    private var windowTitle: String {
+        if let url = selectedFileURL {
+            return url.lastPathComponent
+        }
+        return "Markdown Viewer"
+    }
+
     var body: some View {
         NavigationSplitView {
             // サイドバー: ファイルツリー
@@ -117,33 +159,65 @@ struct ContentView: View {
                 .listStyle(.sidebar)
                 .navigationTitle(tree.name)
             } else {
-                Text("フォルダをドロップすると\nファイルツリーが表示されます")
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 8) {
+                    Image(systemName: "folder")
+                        .font(.title)
+                        .foregroundColor(.secondary)
+                    Text("フォルダをドロップすると\nファイルツリーが表示されます")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         } detail: {
-            // メインエリア: Markdownプレビュー
+            // メインエリア: Markdownプレビュー or 初期画面
             ZStack {
-                Color.black.edgesIgnoringSafeArea(.all)
+                if let content = markdownContent {
+                    // Markdownプレビュー表示
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            // ファイル名ヘッダー
+                            if let url = selectedFileURL {
+                                HStack {
+                                    Image(systemName: "doc.text")
+                                        .foregroundColor(.secondary)
+                                    Text(url.lastPathComponent)
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 32)
+                                .padding(.top, 20)
+                                .padding(.bottom, 8)
 
-                ScrollView {
-                    Markdown(markdownContent)
-                        .markdownTheme(.gitHub)
-                        .padding(.vertical, 40)
-                        .padding(.horizontal, 32)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                                Divider()
+                                    .padding(.horizontal, 32)
+                            }
+
+                            Markdown(content)
+                                .markdownTheme(.gitHub)
+                                .padding(.vertical, 24)
+                                .padding(.horizontal, 32)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                } else {
+                    // 初期画面: ドロップゾーンのプレースホルダー
+                    DropZonePlaceholder()
                 }
 
-                // Overlay for Drop Zone feedback
+                // ドラッグ中のオーバーレイフィードバック
                 if isTargeted {
-                    Color.blue.opacity(0.2)
-                        .border(Color.blue, width: 2)
-                        .edgesIgnoringSafeArea(.all)
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [8, 4]))
+                        .background(Color.accentColor.opacity(0.08))
+                        .padding(8)
+                        .animation(.easeInOut(duration: 0.2), value: isTargeted)
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .navigationTitle(windowTitle)
         .frame(minWidth: 600, idealWidth: 900, minHeight: 400, idealHeight: 600)
         .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
             guard let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier("public.file-url") }) else { return false }
